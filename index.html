@@ -15,7 +15,7 @@ Your browser does not support the HTML5 canvas tag.</canvas>
 </div>
 
 <input type="range" id="perspective"  min="1" max="1560" value="50"> perspective <br/>
-<input type="range" id="tile_width"  min="1" max="500" value="50"> tile_width <br/>
+<input type="range" id="width"  min="1" max="2000" value="500"> width <br/>
 <input type="range" id="cols"  min="1" max="200" value="4"> columns <br/>
 <input type="range" id="rows"  min="1" max="200" value="4"> rows <br/>
 
@@ -27,7 +27,8 @@ Math.Tau = 0.5 * Math.PI
 
 // CONFIG
 // ---------------------------------------------------------------------------------
-var tile_width = 100 			// width at baseline [px]
+var width = 100 			// width of baseline [px]
+var tile_width = 0          // calculated later
 var cols = 10;
 var rows = 30;
 
@@ -55,7 +56,7 @@ var textdiv = document.getElementById("text");
 var ctx = c.getContext("2d");
 
 var perspective_slider = document.getElementById("perspective");
-var tile_width_slider = document.getElementById("tile_width");
+var width_slider = document.getElementById("width");
 var cols_slider = document.getElementById("cols");
 var rows_slider = document.getElementById("rows");
 
@@ -99,7 +100,7 @@ function main()
 	ctx.clearRect(0, 0, c.width, c.height);
 
 	perspective = perspective_slider.valueAsNumber / 1000.0
-	tile_width = tile_width_slider.valueAsNumber
+	width = width_slider.valueAsNumber
 	cols = cols_slider.valueAsNumber
 	rows = rows_slider.valueAsNumber
 
@@ -112,6 +113,7 @@ function main()
 		throw 'Perspective should smaller than 0.5 pi.';
 	}
 
+	tile_width = width / cols
 	var dx1 = tile_width	// alias for calculations
 
 
