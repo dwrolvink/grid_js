@@ -19,6 +19,13 @@ Your browser does not support the HTML5 canvas tag.</canvas>
 <input type="range" id="cols"  min="1" max="200" value="4"> columns <br/>
 <input type="range" id="rows"  min="1" max="200" value="4"> rows <br/>
 
+  <input type="checkbox" id="animate" name="animate"
+         checked>
+  <label for="animate">Animate</label> <br/>
+
+  <input type="range" id="it_max"  min="1" max="80" value="30">
+  <label for="it_max">Speed</label>
+
 <script>
 
 // CONSTANTS
@@ -59,12 +66,18 @@ var perspective_slider = document.getElementById("perspective");
 var width_slider = document.getElementById("width");
 var cols_slider = document.getElementById("cols");
 var rows_slider = document.getElementById("rows");
+var animate_checkbox = document.getElementById("animate");
+var it_max_slider = document.getElementById("it_max");
 
 var screen_width = 1040; // make dynamic
 var screen_height = 640; // make dynamic
 
 var screen_middle_x = screen_width * 0.5
 var screen_middle_y = screen_height * 0.5
+
+var it = 0
+var it_max = 10
+var animate = false;
 
 // object declaration, values calculated later
 var a = { 				// bottom line
@@ -99,10 +112,18 @@ function main()
 	// clear screen
 	ctx.clearRect(0, 0, c.width, c.height);
 
+	// increase iterator
+	it++
+	if (it >= it_max){
+		it = 0
+	}
+
 	perspective = perspective_slider.valueAsNumber / 1000.0
 	width = width_slider.valueAsNumber
 	cols = cols_slider.valueAsNumber
 	rows = rows_slider.valueAsNumber
+	animate = animate_checkbox.checked
+	it_max = parseInt(600 / it_max_slider.valueAsNumber)
 
 	// ERROR CHECKING
 	// ---------------------------------------------------------------------------------
@@ -290,6 +311,9 @@ function main()
 	let width_dif = a.width - b.width;
 	let d_width = (a.width - b.width) / h;
 
+
+	let previous_row_y = baseline.y
+
 	for (let i = 0; i < rows; i++)
 	{
 		dx1 = baseline.width / cols
@@ -310,23 +334,40 @@ function main()
 		let alpha2 = Math.atan( over2 / aanl2 )
 
 		let aanl = (Math.tan(alpha2) * dx1) / (Math.tan(alpha1) - Math.tan(alpha2))
-		let dy = Math.tan(alpha1) * aanl
 
-		let width = baseline.width - ( d_width * dy )
+		// row height
+		let row_h = Math.tan(alpha1) * aanl
+
+		let width = baseline.width - ( d_width * row_h )
 
 		x1 = (screen_width - width) * 0.5
 		x2 = (screen_width + width) * 0.5
-		y = baseline.y - dy
+		y = baseline.y - row_h
 
-		if (y < b.y){
-			break;
+		// animate
+		let animate_y = 0
+		let animate_x = 0
+		if (animate){
+			let dy = (previous_row_y - y)/ it_max
+			animate_y = dy * it
+
+			let dx = (x1 - baseline.x1) / it_max
+			animate_x = dx * it
+
+			// update
+			previous_row_y = y
 		}
 
+		// draw
 		ctx.beginPath();
-		ctx.moveTo(x1, y);
-		ctx.lineTo(x2, y);
+		ctx.moveTo(x1 - animate_x, y + animate_y);
+		ctx.lineTo(x2 + animate_x, y + animate_y);
 		ctx.stroke();
 
+		// [optimalization] stop drawing loop if top of screen is reached
+		if (y + animate_y < 0) {
+			break;
+		}
 
 
 		// diagonal
@@ -387,10 +428,12 @@ function main()
 	textdiv.innerHTML = `
 	height: ${h}`
 
-	window.requestAnimationFrame(main);
+
+	window.requestAnimationFrame(main)
 }
 
-window.requestAnimationFrame(main);
+window.requestAnimationFrame(main)
+
 
 
 
