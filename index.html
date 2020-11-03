@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+input[type=range] {width:80vw;}
+</style>
+</head>
+<body>
+
+<canvas id="myCanvas" width="1040" height="640" style="border:1px solid #d3d3d3;">
+Your browser does not support the HTML5 canvas tag.</canvas>
+
+<div id="text" style="white-space: pre;">
+</div>
+
+<input type="range" id="perspective"  min="1" max="1560" value="50"> perspective <br/>
+<input type="range" id="tile_width"  min="1" max="500" value="50"> tile_width <br/>
+<input type="range" id="cols"  min="1" max="200" value="4"> columns <br/>
+<input type="range" id="rows"  min="1" max="200" value="4"> rows <br/>
+
+<script>
+
+// CONSTANTS
+// ---------------------------------------------------------------------------------
+Math.Tau = 0.5 * Math.PI
+
+// CONFIG
+// ---------------------------------------------------------------------------------
+var tile_width = 100 			// width at baseline [px]
+var cols = 10;
+var rows = 30;
+
+// shrinkage, and thus how "high off the ground" you feel
+// determines the base angles of the perspective triangle
+// <0.0001 - 1.56>
+var perspective = Math.Tau - 0.5
+
+// moves the baseline (a) off of the bottom [pixels]
+var margin = 20;
+
+// used to make squares square
+var square_coefficient = 0.85
+
+// draw construction lines in gray
+var draw_helper_lines = true
+var draw_top_line_finder = false
+var draw_perspective_triangle = false
+var draw_vanishing_point_diagonal = false
+
+// INIT
+// ---------------------------------------------------------------------------------
+var c = document.getElementById("myCanvas");
+var textdiv = document.getElementById("text");
+var ctx = c.getContext("2d");
+
+var perspective_slider = document.getElementById("perspective");
+var tile_width_slider = document.getElementById("tile_width");
+var cols_slider = document.getElementById("cols");
+var rows_slider = document.getElementById("rows");
+
+var screen_width = 1040; // make dynamic
+var screen_height = 640; // make dynamic
+
+var screen_middle_x = screen_width * 0.5
+var screen_middle_y = screen_height * 0.5
+
+// object declaration, values calculated later
+var a = { 				// bottom line
+	width: 0,
+	x1: 0,
+	x2: 0,
+	y: 0
+}
+var b = {				// top line
+	width: 0,
+	height: 0,
+	x1: 0,
+	x2: 0,
+	y: 0
+}
+
+var m1 = {
+	width: 0,
+	height: 0,
+	x1: 0,
+	x2: 0,
+	y: 0
+}
+var v1 = {
+	x1: 0,
+	x2: 0
+}
+
+
+function main()
+{
+	// clear screen
+	ctx.clearRect(0, 0, c.width, c.height);
+
+	perspective = perspective_slider.valueAsNumber / 1000.0
+	tile_width = tile_width_slider.valueAsNumber
+	cols = cols_slider.valueAsNumber
+	rows = rows_slider.valueAsNumber
+
+	// ERROR CHECKING
+	// ---------------------------------------------------------------------------------
+	if (perspective <= 0){
+		throw 'Perspective should be higher than 0.';
+	}
+	if (perspective >= Math.Tau){
+		throw 'Perspective should smaller than 0.5 pi.';
+	}
+
+	var dx1 = tile_width	// alias for calculations
+
+
+	// CALCULATE
+	// ---------------------------------------------------------------------------------
+	// DEFINE BASELINE (a)
+	a.width = tile_width * cols
+	a.x1 = (screen_width - a.width ) * 0.5;
+	a.x2 = (screen_width + a.width ) * 0.5;
+	a.y = screen_height - margin + 0.5;
+
+	// draw baseline
+	ctx.beginPath();
+	ctx.moveTo(a.x1, a.y);
+	ctx.lineTo(a.x2, a.y);
+	ctx.stroke();
+
+	// CALCULATE PERSPECTIVE TRIANGLE
+	/* The base lies at the corners of line a. The sides move up with angles
+	{perspective}. */
+	// Find height of perspective triangle
+	var pt_width = a.width
+	var pt_h = Math.tan(perspective) * 0.5 * pt_width
+
+	var pt_x1 = a.x1 					// leftmost
+	var pt_x2 = a.x2 					// rightmost
+	var pt_xm = screen_middle_x 		// middle x
+	var pt_y1 = a.y 					// bottom
+	var pt_y2 = a.y - pt_h 				// top
+
+	// draw helper lines (triangle)
+	if (draw_helper_lines && draw_perspective_triangle)
+	{
+		ctx.strokeStyle = '#9f9f9f';
+
+		// perspective triangle
+		ctx.beginPath();
+		ctx.moveTo(a.x1, a.y);
+		ctx.lineTo(screen_width * 0.5, a.y - pt_h);
+		ctx.stroke();
+
+		ctx.beginPath();
+		ctx.moveTo(a.x2, a.y);
+		ctx.lineTo(screen_width * 0.5, a.y - pt_h);
+		ctx.stroke();
+
+		ctx.strokeStyle = '#000000';
+	}
+
+
+	// -- VANISHING POINT
+	// calc vanish point
+	/* The vanish diagonal (drawn in help line section). Will intersect with the left
+	border at a certain height. The angle needs to be determined at which height the
+	length of the left border that is cut off will be (dx1 * square_coefficient),
+	measured starting from line a.
+	The vanishing line will start on line a, x: a.x1 - dx1, and go up by the
+	determined angle, until it reaches the same height as the top of the perspective
+	triangle. This vanishing point will help in determining the row height. */
+
+	// left border angle
+	let lb_al = perspective
+
+	// height at which the hypotenuse (cut off segment of left border)
+	// is the correct length
+	let row1_h = Math.sin(lb_al) * dx1 * square_coefficient
+	let adj = Math.cos(lb_al) * dx1 * square_coefficient
+
+	// vanishing point angle
+	let van_al = Math.atan(row1_h / (dx1 + adj))
+
+	// vanishing point height is same as triangle height
+	let van_y = a.y - pt_h
+
+	// width is resultant from the height and the angle
+	let van_x = a.x1 + (pt_h / Math.tan(van_al))
+
+	// draw helper lines
+	if (draw_helper_lines && draw_vanishing_point_diagonal)
+	{
+		ctx.strokeStyle = '#9f9f9f';
+
+		// vanishing point diagonal
+		ctx.beginPath();
+		ctx.moveTo(a.x1 - dx1, a.y);
+		ctx.lineTo(van_x, van_y);
+		ctx.stroke();
+
+		// connect vanishing point with top of triangle
+		ctx.beginPath();
+		ctx.moveTo(screen_width * 0.5, a.y - pt_h);
+		ctx.lineTo(van_x, van_y);
+		ctx.stroke();
+
+		ctx.strokeStyle = '#000000';
+	}
+
+	// FIND HEIGHT OF TOP LINE (b)
+	/* 	(1) Drawing a line from (a.x1 - 1*dx1) to the vanishing point will give us, at the
+		intersection with left border, the height of the first row.
+		(2) Drawing a line from (a.x1 - n*dx1) to (...) gives the height of the nth row.
+		This is where the top line must be.
+	*/
+	// find the angle of the helper line (h)
+	var h_offset = (rows * dx1)
+	var h_x1 = a.x1 - h_offset
+	var h_al = Math.atan( pt_h / (van_x - h_x1) )
+
+	// find intersection height between h and lb
+	var lb_adj = (Math.tan(h_al) * h_offset) / (Math.tan(perspective) - Math.tan(h_al))
+	var h_adj = h_offset + lb_adj
+	b.height = Math.tan(h_al) * h_adj
+
+	// find width of line b
+	b.width = 2 * (pt_h - b.height) / Math.tan(perspective)
+
+	// calc top line placement
+	b.x1 = (screen_width - b.width ) * 0.5;
+	b.x2 = (screen_width + b.width ) * 0.5;
+	b.y = a.y - b.height
+
+	var dx2 = b.width / cols  // width of one column on line b
+
+	// helper lines
+	if (draw_helper_lines && draw_top_line_finder)
+	{
+		ctx.strokeStyle = '#0000FF';
+
+		// helper line diagonal
+		ctx.beginPath();
+		ctx.moveTo(h_x1, a.y);
+		ctx.lineTo(van_x, van_y);
+		ctx.stroke();
+
+		ctx.strokeStyle = '#000000';
+	}
+
+	// -- DRAW FRAME
+	// draw top line
+	ctx.beginPath();
+	ctx.moveTo(b.x1, b.y);
+	ctx.lineTo(b.x2, b.y);
+	ctx.stroke();
+
+	// left border
+	ctx.beginPath();
+	ctx.moveTo(a.x1, a.y);
+	ctx.lineTo(b.x1, b.y);
+	ctx.stroke();
+
+
+	// right border
+	ctx.beginPath();
+	ctx.moveTo(a.x2, a.y);
+	ctx.lineTo(b.x2, b.y);
+	ctx.stroke();
+
+
+	var h =  (a.y - b.y);
+
+	// verticals
+	for (let i = 0; i < cols; i++){
+		let x1 = a.x1 + (i+1) * dx1
+		let x2 = b.x1 + (i+1) * dx2
+
+		ctx.beginPath();
+		ctx.moveTo(x1, a.y);
+		ctx.lineTo(x2, b.y);
+		ctx.stroke();
+	}
+
+	// horizontals
+	let baseline = {...a};
+	let width_dif = a.width - b.width;
+	let d_width = (a.width - b.width) / h;
+
+	for (let i = 0; i < rows; i++)
+	{
+		dx1 = baseline.width / cols
+
+		d_x1 = a.x1 - i*(a.width / cols)
+		d_x2 = van_x
+		d_y1 = a.y
+		d_y2 = van_y
+
+		// calc alpha1
+		let aanl1 = b.x1 + (b.width / cols) - (baseline.x1 + (baseline.width / cols))
+		let over1 = baseline.y - b.y;
+		let alpha1 = Math.atan( over1 / aanl1 )
+
+		// calc alhpa2
+		let aanl2 = d_x2 - d_x1
+		let over2 = d_y1 - d_y2;
+		let alpha2 = Math.atan( over2 / aanl2 )
+
+		let aanl = (Math.tan(alpha2) * dx1) / (Math.tan(alpha1) - Math.tan(alpha2))
+		let dy = Math.tan(alpha1) * aanl
+
+		let width = baseline.width - ( d_width * dy )
+
+		x1 = (screen_width - width) * 0.5
+		x2 = (screen_width + width) * 0.5
+		y = baseline.y - dy
+
+		if (y < b.y){
+			break;
+		}
+
+		ctx.beginPath();
+		ctx.moveTo(x1, y);
+		ctx.lineTo(x2, y);
+		ctx.stroke();
+
+
+
+		// diagonal
+		/*
+		ctx.strokeStyle = '#9f9f9f';
+		ctx.beginPath();
+		ctx.moveTo(d_x1, d_y1);
+		ctx.lineTo(d_x2, d_y2);
+		ctx.stroke();
+
+		ctx.strokeStyle = '#000000';
+	*/
+
+		// update baseline
+		baseline.width = width
+		baseline.y = y
+		baseline.x1 = x1
+	}
+
+	// box
+	box_bottom = {
+		width: b.width,
+		x1: b.x1,
+		x2: b.x2,
+		y: screen_middle_y - (b.y - screen_middle_y)
+	}
+
+	box_top = {
+		width: a.width,
+		x1: a.x1,
+		x2: a.x2,
+		y: margin
+	}
+
+	if (false){
+
+		ctx.beginPath();
+		ctx.moveTo(box_top.x1, box_top.y);
+		ctx.lineTo(box_top.x2, box_top.y);
+		ctx.stroke();
+
+		ctx.beginPath();
+		ctx.moveTo(box_top.x1, box_top.y);
+		ctx.lineTo(box_bottom.x1, box_bottom.y);
+		ctx.stroke();
+
+		ctx.beginPath();
+		ctx.moveTo(box_top.x2, box_top.y);
+		ctx.lineTo(box_bottom.x2, box_bottom.y);
+		ctx.stroke();
+
+		ctx.beginPath();
+		ctx.moveTo(box_bottom.x1, box_bottom.y);
+		ctx.lineTo(box_bottom.x2, box_bottom.y);
+		ctx.stroke();
+	}
+
+	textdiv.innerHTML = `
+	height: ${h}`
+
+	window.requestAnimationFrame(main);
+}
+
+window.requestAnimationFrame(main);
+
+
+
+
+
+
+
+
+</script>
+
+</body>
+</html>
