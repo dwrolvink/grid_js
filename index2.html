@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+input[type=range] {width:60vw;}
+</style>
+</head>
+<body>
+
+<canvas id="myCanvas" width="640" height="640" style="border:1px solid #d3d3d3; resize: both;">
+Your browser does not support the HTML5 canvas tag.</canvas>
+
+<div id="text" style="white-space: pre;">
+</div>
+
+<input type="range" id="cam_distance_y"  min="-200" max="200" value="20" oninput="input_changed=true"> camera distance y<br/>
+<input type="range" id="cam_distance_x"  min="-200" max="200" value="0" oninput="input_changed=true"> camera distance x<br/>
+
+  <input type="checkbox" id="hl" oninput="input_changed=true"
+    checked>
+  <label for="hl">Draw construction lines</label>
+
+
+<script>
+
+// CONSTANTS
+// ---------------------------------------------------------------------------------
+Math.Tau = 0.5 * Math.PI
+let DGR90 = 0.5 * Math.PI
+let DGR45 = 0.5 * DGR90
+
+// CONFIG
+// ---------------------------------------------------------------------------------
+var width = 100 			// width of baseline [px]
+var tile_width = 0          // calculated later
+var cols = 10;
+var rows = 30;
+
+// shrinkage, and thus how "high off the ground" you feel
+// determines the base angles of the perspective triangle
+// <0.0001 - 1.56>
+var perspective = Math.Tau - 0.5
+
+// moves the baseline (a) off of the bottom [pixels]
+var margin = 20;
+
+// draw construction lines in gray
+var draw_helper_lines = true
+var draw_top_line_finder = true
+var draw_perspective_triangle = true
+var draw_vanishing_point_diagonal = true
+
+// INIT
+// ---------------------------------------------------------------------------------
+var c = document.getElementById("myCanvas");
+var textdiv = document.getElementById("text");
+var ctx = c.getContext("2d");
+
+var cam_distance_x_slider = document.getElementById("cam_distance_x");
+var cam_distance_y_slider = document.getElementById("cam_distance_y");
+var hl = document.getElementById("hl")
+
+var screen_width = c.width
+var screen_height = c.height
+
+var screen_middle_x = screen_width * 0.5
+var screen_middle_y = screen_height * 0.5
+
+var it = 0
+var it_max = 10
+var animate = false;
+var input_changed = true;
+
+// new
+var area_width = 200
+var area_height = 200
+
+var cam_z = 20
+var cam_y;
+var cam_x;
+
+var lens_angle = DGR45
+var lens_tilt = 0.4 * Math.Tau // plus is tilt camera down
+
+var vp_distance = 20
+
+var squares = [
+	{
+		x1: area_width - 40,
+		x2: area_width,
+		w: 40,
+		y1: area_height/2 - 20,
+		y2: area_height/2 ,
+		h: 20
+	},
+	{
+		x1: 0,
+		x2: 40,
+		w: 40,
+		y1: area_height/2 - 20,
+		y2: area_height/2 + 20,
+		h: 40
+	},
+	{
+		x1: area_width - 40,
+		x2: area_width,
+		w: 40,
+		y1: area_height - 20,
+		y2: area_height ,
+		h: 20
+	}
+]
+
+// draw lines
+function draw_intersection(x, y, cam_x, cam_y, vp_distance, margin, draw_helper_lines){
+	vp_y = cam_y + vp_distance + 0.5
+
+	dist_y = cam_y - y
+	a = Math.atan( (cam_x - x) / dist_y  )
+	adj = vp_y - y
+	opp = Math.tan(a) * adj
+
+	int_x = x + opp
+	int_y = vp_y
+
+
+	// normalize
+	/*
+	if (int_x < 0){
+		int_x = 0
+	}
+	if (int_x > 200){
+		int_x = 200
+	}
+	*/
+
+	if (x < cam_x && int_x < cam_x){
+		int_x = 200
+	}
+	if (x > cam_x && int_x > cam_x){
+		int_x = cam_x - 200
+	}
+
+	if (draw_helper_lines){
+		ctx.beginPath();
+		ctx.moveTo(x + margin, y + margin);
+		ctx.lineTo(int_x + margin, int_y + margin);
+		ctx.stroke();
+	}
+
+	return {x: int_x, y: int_y}
+}
+
+function main()
+{
+	// clear screen
+	ctx.clearRect(0, 0, c.width, c.height);
+
+	// get input
+	cam_y = area_height + cam_distance_y_slider.valueAsNumber;
+	cam_x = area_width / 2 + cam_distance_x_slider.valueAsNumber;
+	draw_helper_lines = hl.checked;
+
+	// draw box
+	ctx.strokeStyle = '#AAA';
+	ctx.beginPath();
+	ctx.moveTo(margin, margin);
+	ctx.lineTo(margin, margin + area_height);
+	ctx.lineTo(margin + area_width, margin + area_height);
+	ctx.lineTo(margin + area_width, margin);
+	ctx.lineTo(margin, margin);
+	ctx.stroke();
+	ctx.strokeStyle = '#000000';
+
+	// draw squares and construction lines and view
+	for (let i = 0; i < squares.length; i++){
+		square = squares[i]
+
+		// draw square
+		ctx.strokeStyle = '#FF0000';
+		ctx.beginPath();
+		ctx.moveTo(margin + square.x1, square.y2 + margin);
+		ctx.lineTo(margin + square.x2, square.y2 + margin);
+		ctx.lineTo(margin + square.x2, square.y1 + margin);
+		ctx.lineTo(margin + square.x1, square.y1 + margin);
+		ctx.lineTo(margin + square.x1, square.y2 + margin);
+		ctx.stroke();
+
+		zoom = 3.2
+		function zoomx(x, cam_x){
+			return (x - cam_x) * zoom + screen_middle_x
+		}
+
+		// -- per view: draw construction lines, and draw view
+		y1 = screen_middle_y + 215
+		y2 = screen_middle_y + 200
+
+		// left side
+		if (square.y1 < cam_y && cam_x < square.x1){
+			ctx.strokeStyle = '#00FFFF';
+			ctx.fillStyle = '#00FFFF';
+			int1_1 = draw_intersection(square.x1, square.y1, cam_x, cam_y, vp_distance, margin, draw_helper_lines)
+			int1_2 = draw_intersection(square.x1, square.y2, cam_x, cam_y, vp_distance, margin, draw_helper_lines)
+
+			ctx.beginPath();
+			ctx.moveTo(screen_width - zoomx(int1_1.x, cam_x ), y1);
+			ctx.lineTo(screen_width - zoomx(int1_1.x, cam_x ), y2);
+			ctx.lineTo(screen_width - zoomx(int1_2.x, cam_x ), y2);
+			ctx.lineTo(screen_width - zoomx(int1_2.x, cam_x ), y1);
+			ctx.fill();
+		}
+
+		// right side
+		if (square.y1 < cam_y && cam_x > square.x2){
+			ctx.strokeStyle = '#FFFF00';
+			ctx.fillStyle = '#FFFF00';
+			int1_1 = draw_intersection(square.x2, square.y1, cam_x, cam_y, vp_distance, margin, draw_helper_lines)
+			int1_2 = draw_intersection(square.x2, square.y2, cam_x, cam_y, vp_distance, margin, draw_helper_lines)
+
+			ctx.beginPath();
+			ctx.moveTo(screen_width - zoomx(int1_1.x, cam_x ), y1);
+			ctx.lineTo(screen_width - zoomx(int1_1.x, cam_x ), y2);
+			ctx.lineTo(screen_width - zoomx(int1_2.x, cam_x ), y2);
+			ctx.lineTo(screen_width - zoomx(int1_2.x, cam_x ), y1);
+			ctx.fill();
+		}
+		// front side
+		if (square.y2 < cam_y){
+			ctx.strokeStyle = '#777';
+			ctx.fillStyle = '#777';
+			int2_1 = draw_intersection(square.x1, square.y2, cam_x, cam_y, vp_distance, margin, draw_helper_lines)
+			int2_2 = draw_intersection(square.x2, square.y2, cam_x, cam_y, vp_distance, margin, draw_helper_lines)
+
+			ctx.beginPath();
+			ctx.moveTo(screen_width - zoomx(int2_1.x, cam_x ), y1);
+			ctx.lineTo(screen_width - zoomx(int2_1.x, cam_x ), y2);
+			ctx.lineTo(screen_width - zoomx(int2_2.x, cam_x ), y2);
+			ctx.lineTo(screen_width - zoomx(int2_2.x, cam_x ), y1);
+			ctx.fill();
+		}
+	}
+
+	// draw camera
+	ctx.fillStyle = "#FF0000"
+	let flat_cam_x = margin + cam_x
+	let flat_cam_y = margin + cam_y
+	ctx.fillRect(flat_cam_x - 1, flat_cam_y - 1, 2,2);
+
+	// draw viewport
+	flat_vp_x1 = flat_cam_x - 0.5*area_width
+	flat_vp_x2 = flat_cam_x + 0.5*area_width
+	flat_vp_y = flat_cam_y + vp_distance + 0.5
+	ctx.strokeStyle = '#0000FF';
+	ctx.beginPath();
+	ctx.moveTo(flat_vp_x1, flat_vp_y);
+	ctx.lineTo(flat_vp_x2, flat_vp_y);
+	ctx.stroke();
+
+
+
+
+
+	window.requestAnimationFrame(main)
+}
+window.requestAnimationFrame(main)
+
+
+
+// calc viewport
+// -------------
+// calc angles
+let a1 = lens_angle - lens_tilt
+let b1 = DGR90 - a1
+let a2 = a1 + 2 * lens_angle
+let b2 = DGR90 - a2
+let a3 = (a1 + a2) * 0.5
+let b3 = DGR90 - a3
+
+// calc distances
+let van_adj = cam_z / Math.tan(b3)
+let van_y = van_adj + cam_y
+let van_hyp = cam_z / Math.sin(b3)
+
+let vp_mid_y_hyp = van_hyp + vp_distance
+let vp_mid_y = cam_y - ( Math.cos(b3) * vp_mid_y_hyp - van_adj )
+
+
+// calc viewport height
+let vp_adj1 = cam_z / Math.tan(lens_angle)
+
+/*
+function main()
+{
+	// clear screen
+	ctx.clearRect(0, 0, c.width, c.height);
+
+	// increase iterator
+	it++
+	if (it > it_max - 1){
+		it = 0
+	}
+
+	if (input_changed)
+	{
+		// GET INPUT
+		// ---------------------------------------------------------------------------------
+		// fetch control values
+		perspective = perspective_slider.valueAsNumber / 1000.0
+		width = width_slider.valueAsNumber
+		cols = cols_slider.valueAsNumber
+		rows = rows_slider.valueAsNumber
+
+		draw_top_line_finder = hl_topline_finder.checked
+		draw_perspective_triangle = hl_perspective_triangle.checked
+		draw_vanishing_point_diagonal = hl_vanishing_point_diagonal.checked
+
+		animate = animate_checkbox.checked
+		it_max = parseInt(600 / it_max_slider.valueAsNumber)
+
+		// input error checking
+		// ---------------------------------------------------------------------------------
+		if (perspective <= 0){
+			throw 'Perspective should be higher than 0.';
+		}
+		if (perspective >= Math.Tau){
+			throw 'Perspective should smaller than 0.5 pi.';
+		}
+
+		tile_width = width / cols
+		dx1 = tile_width
+
+	}
+
+	// set input changed to false so we only recalculate when input is changed
+	input_changed = false
+
+
+	window.requestAnimationFrame(main)
+}
+*/
+//window.requestAnimationFrame(main)
+
+
+
+
+
+
+
+
+
+</script>
+
+</body>
+</html>

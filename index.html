@@ -16,8 +16,8 @@ Your browser does not support the HTML5 canvas tag.</canvas>
 
 <input type="range" id="perspective"  min="1" max="1560" value="1250" oninput="input_changed=true"> perspective <br/>
 <input type="range" id="width"  min="1" max="2000" value="300" oninput="input_changed=true"> width <br/>
-<input type="range" id="cols"  min="1" max="200" value="2" oninput="input_changed=true"> columns <br/>
-<input type="range" id="rows"  min="1" max="200" value="2" oninput="input_changed=true"> rows <br/>
+<input type="range" id="cols"  min="1" max="200" value="4" oninput="input_changed=true"> columns <br/>
+<input type="range" id="rows"  min="1" max="200" value="8" oninput="input_changed=true"> rows <br/>
 
   <input type="checkbox" id="animate" name="animate" oninput="input_changed=true"
     >
@@ -450,6 +450,75 @@ function main()
 		ctx.stroke();
 	}
 
+	if (false)
+	{
+		let block_row = 1
+		let block_col = 3
+		let block_h = 1 		// percentage of dx
+
+		let r = row_list[block_row].top.width / row_list[block_row].bottom.width
+
+		let m = (Math.atan(perspective * (0.5/2) * Math.PI) * 10 - 4.4) * 2
+		if (m < 0){ m = 0 }
+		console.log(m)
+
+		let block_dx1 = row_list[block_row].bottom.width / cols
+		let block_dx2 = row_list[block_row].top.width / cols
+
+		block_h = block_h * block_dx1 * (1.56 - perspective)
+
+		let b_a_x1 = row_list[block_row].bottom.x1 + block_dx1 * block_col
+		let b_a_x2 = b_a_x1 + m
+		let b_b_x1 = row_list[block_row].bottom.x1 + block_dx1 * (block_col+1)
+		let b_b_x2 = b_b_x1 + m
+
+		let b_front_y1 = row_list[block_row].bottom.y - 1
+		let b_front_y2 = row_list[block_row].bottom.y - block_h
+		let b_back_y1 = row_list[block_row].top.y
+		let b_back_y2 = row_list[block_row].top.y - block_h * r
+
+		let b_c_x1 = row_list[block_row].top.x1 + block_dx2 * (block_col+1)
+		let b_c_x2 = b_c_x1 + m
+		let b_d_x1 = row_list[block_row].top.x1 + block_dx2 * (block_col)
+		let b_d_x2 = b_d_x1 + m
+
+		// front panel
+		ctx.strokeStyle = '#000000';
+		ctx.beginPath();
+		ctx.moveTo(b_a_x1, b_front_y1);
+		ctx.lineTo(b_a_x2, b_front_y2);
+		ctx.lineTo(b_b_x2, b_front_y2);
+		ctx.lineTo(b_b_x1, b_front_y1);
+		ctx.fillStyle= '#EEE';
+		ctx.fill();
+		ctx.stroke();
+
+		// left panel
+		ctx.strokeStyle = '#000000';
+		ctx.beginPath();
+		ctx.moveTo(b_a_x1, b_front_y1);
+		ctx.lineTo(b_d_x1, b_back_y1);
+		ctx.lineTo(b_d_x2, b_back_y2);
+		ctx.lineTo(b_a_x2, b_front_y2);
+		ctx.fillStyle= '#DDD';
+		ctx.fill();
+		ctx.stroke();
+		ctx.strokeStyle = '#000000';
+
+		// top panel
+		if (perspective >= Math.PI/10){
+			ctx.strokeStyle = '#000000';
+			ctx.beginPath();
+			ctx.lineTo(b_d_x2, b_back_y2);
+			ctx.lineTo(b_c_x2, b_back_y2);
+			ctx.lineTo(b_b_x2, b_front_y2);
+			ctx.lineTo(b_a_x2, b_front_y2);
+			ctx.fillStyle= '#FFF';
+			ctx.fill();
+			ctx.stroke();
+			ctx.strokeStyle = '#000000';
+		}
+	}
 
 
 
